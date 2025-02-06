@@ -1,0 +1,49 @@
+import tweepy
+import re
+import time
+from collections import defaultdict
+
+# Replace with your actual API keys
+consumer_key = "YOUR_CONSUMER_KEY"
+consumer_secret = "YOUR_CONSUMER_SECRET"
+access_token = "YOUR_ACCESS_TOKEN"
+access_token_secret = "YOUR_ACCESS_TOKEN_SECRET"
+
+# Authenticate with Twitter API
+auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
+auth.set_access_token(access_token, access_token_secret)
+api = tweepy.API(auth)
+
+# Regex for Solana contract addresses (basic example - improve as needed)
+solana_address_regex = r"[1-9A-HJ-NP-Za-km-z]{44}"
+
+# Dictionary to store mention counts
+mention_counts = defaultdict(int)
+
+def scan_twitter():
+    try:
+        for tweet in tweepy.Cursor(api.search_tweets, q="Solana", lang="en").items():  #Search query can be refined.
+            matches = re.findall(solana_address_regex, tweet.text)
+            for address in matches:
+                mention_counts[address] += 1
+
+                # Basic spike detection (example - refine as needed)
+                if mention_counts[address] > 10:  # Check if mention count exceeds a threshold
+                    print(f"Potential volume spike for: {address}")
+
+                    # Post a tweet (add error handling)
+                    try:
+                        api.update_status(f"Potential volume spike detected for: {address}")
+                        print(f"Tweeted about: {address}") #Confirmation message
+                    except tweepy.TweepyError as tweet_error:
+                        print(f"Error tweeting: {tweet_error}")  #Handle potential errors.
+
+        mention_counts.clear()  # Resets every scan.
+        time.sleep(60)  # Scan every 60 seconds (adjust as needed)
+
+    except tweepy.TweepyError as e:
+        print(f"Error: {e}")
+
+while True:
+    scan_twitter()
+
