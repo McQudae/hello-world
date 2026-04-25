@@ -1,0 +1,79 @@
+from typing import Any, Dict, List, Optional
+import requests
+
+from .config import GAMMA_BASE_URL, DEFAULT_TIMEOUT
+
+
+class GammaClient:
+    def __init__(self, base_url: str = GAMMA_BASE_URL, timeout: int = DEFAULT_TIMEOUT) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def list_markets(
+        self,
+        limit: int = 10,
+        active: bool = True,
+        closed: bool = False,
+        tag_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        List markets with simple filters.
+
+        Mirrors the documented Gamma /markets query parameters:
+        - limit: page size
+        - active, closed: filter active/open markets
+        - tag_id: category filtering (optional)
+        """
+        params: Dict[str, Any] = {
+            "limit": limit,
+            "active": str(active).lower(),
+            "closed": str(closed).lower(),
+        }
+        if tag_id is not None:
+            params["tag_id"] = tag_id
+
+        resp = requests.get(
+            f"{self.base_url}/markets",
+            params=params,
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_market_by_slug(self, slug: str) -> Dict[str, Any]:
+        """
+        Fetch a single market by slug.
+
+        Polymarket recommends using slugs (from the frontend URL) for
+        fetching specific markets via /markets?slug= or /markets/slug/{slug}.
+        """
+        # Using the documented query-parameter style:
+        #   GET /markets?slug=your-slug
+        params = {"slug": slug}
+        resp = requests.get(
+            f"{self.base_url}/markets",
+            params=params,
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        markets = resp.json()
+        if isinstance(markets, list) and markets:
+            return markets[0]
+        return markets
+
+    @staticmethod
+    def extract_token_ids(market: Dict[str, Any]) -> List[str]:
+        """
+        Extract outcome token IDs from a Gamma market object.
+
+        Gamma responses expose `clobTokenIds` which map to CLOB outcome tokens.
+        """
+        token_ids = market.get("clobTokenIds") or market.get("clob_token_ids")
+        if not token_ids:
+            return []
+        if isinstance(token_ids, str):
+            # Some variants return CSV; others return list
+            return [t.strip() for t in token_ids.split(",") if t.strip()]
+        if isinstance(token_ids, list):
+            return [str(t) for t in token_ids]
+        return []
